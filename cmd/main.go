@@ -1,37 +1,30 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
-	"fmt"
 	"log"
 	"strconv"
+	"sync"
 	"taska/db"
 	"taska/pkg/filesystem"
 	"taska/pkg/models"
 )
 
-func Draft()  {
-	for i := 1; i <=7; i++ {
-		filePath := "../pkg/files/" + strconv.Itoa(i) + ".json"
-		data, err := filesystem.ScanFile(filePath)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		var menu models.Menu
-		err = json.Unmarshal(data, &menu)
-		if err != nil {
-			log.Fatal(err)
-		}
-		//for _, product := range menu.Menu {
-		//	fmt.Println("ID: ", product.ID)
-		//	fmt.Println("Name: ", product.Name)
-		//	fmt.Println("Price: ", product.Price)
-		//	fmt.Println("Image: ", product.Image)
-		//	fmt.Println("Type: ", product.Type)
-		//	fmt.Println("ingredients: ", product.Ingredients)
-		//}
+func ReadJSON(filePath string, c chan models.Restaurant) error {
+	var restaurant models.Restaurant
+	data, err := filesystem.ScanFile(filePath)
+	if err != nil {
+		return err
 	}
+
+	err = json.Unmarshal(data, &restaurant)
+	c <- restaurant
+	return err
+}
+func DropTable(db *sql.DB)  {
+	query :="DELETE FROM Restaurant"
+	db.Exec(query)
 }
 func main() {
 	conn, err := db.Connect()
@@ -39,22 +32,35 @@ func main() {
 		log.Fatal(err)
 	}
 	defer conn.Close()
+	filePath := "../pkg/files/"
+	var restaurants []models.Restaurant
+	c := make(chan models.Restaurant, 7)
+	for i := 0; i < 7; i++ {
+		iterator := i+1
+		go func() {
+			err := ReadJSON(filePath+strconv.Itoa(iterator)+".json", c)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}()
+	}
+	for i := 0; i < 7; i++ {
+		restaurants = append(restaurants, <-c)
+	}
 
-	filePath := "../pkg/files/1.json"
-	data, err := filesystem.ScanFile(filePath)
-	//var menu models.Menu
-	//err = json.Unmarshal(data, &menu)
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	//fmt.Println("ID: ", menu.Menu[0].ID)
-	//fmt.Println("Name: ", menu.Menu[0].Name)
-	//fmt.Println("Price: ", menu.Menu[0].Price)
-	//fmt.Println("Image: ", menu.Menu[0].Image)
-	//fmt.Println("Type: ", menu.Menu[0].Type)
-	//fmt.Println("ingredients: ", menu.Menu[0].Ingredients)
+	DropTable(conn)
 
-	var restaurant models.Restaurant
-	err = json.Unmarshal(data, &restaurant)
-	fmt.Println(restaurant)
+	var wg sync.WaitGroup
+	for i := 0; i <7; i++ {
+		iterator := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := restaurants[iterator].Insert(conn)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}()
+	}
+	wg.Wait()
 }
