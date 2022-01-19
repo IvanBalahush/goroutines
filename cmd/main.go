@@ -1,66 +1,73 @@
 package main
 
 import (
-	"database/sql"
-	"encoding/json"
+	"fmt"
 	"log"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"taska/db"
+	workerPool "taska/internal/worker_pool"
 	"taska/pkg/filesystem"
 	"taska/pkg/models"
 )
 
-func ReadJSON(filePath string, c chan models.Restaurant) error {
-	var restaurant models.Restaurant
-	data, err := filesystem.ScanFile(filePath)
-	if err != nil {
-		return err
-	}
 
-	err = json.Unmarshal(data, &restaurant)
-	c <- restaurant
-	return err
-}
-func DropTable(db *sql.DB)  {
-	query :="DELETE FROM Restaurant"
-	db.Exec(query)
-}
 func main() {
 	conn, err := db.Connect()
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer conn.Close()
-	filePath := "../pkg/files/"
+
+	filePath := "../assets/files/"
+
 	var restaurants []models.Restaurant
-	c := make(chan models.Restaurant, 7)
-	for i := 0; i < 7; i++ {
-		iterator := i+1
-		go func() {
-			err := ReadJSON(filePath+strconv.Itoa(iterator)+".json", c)
+	ch := make(chan models.Restaurant, 7)
+
+	for i := 1; i <= 7; i++ {
+		go func(i int) {
+			err := filesystem.ReadJSON(filepath.Join(filePath, strconv.Itoa(i)+".json"), ch)
 			if err != nil {
 				log.Fatal(err)
 			}
-		}()
+		}(i)
 	}
 	for i := 0; i < 7; i++ {
-		restaurants = append(restaurants, <-c)
+		restaurants = append(restaurants, <-ch)
 	}
 
-	DropTable(conn)
 
+
+	models.DropRestaurant(conn)
+	models.DropProduct(conn)
+
+	pool := workerPool.NewPool(4)
+	count := pool.WorkerCount
 	var wg sync.WaitGroup
-	for i := 0; i <7; i++ {
-		iterator := i
+	for i := 0; i < count; i++ {
+		//wg.Add(1)
+		//go func(i int) {
+		//	defer wg.Done()
+		//	err := restaurants[i].Insert(conn)
+		//	if err != nil {
+		//		log.Fatal(err)
+		//	}
+		//}(i)
 		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			err := restaurants[iterator].Insert(conn)
+		go pool.Run(&wg, func(restaurant models.Restaurant) {
+			restaurantID := models.GetID(conn, `SELECT id FROM Restaurant WHERE name = ?`, `INSERT INTO Restaurant(name) VALUE (?)`, restaurant.Name)
+			_, err := conn.Exec(`INSERT INTO Restaurant VALUE (?,?,?,?,?)`, restaurant.Id, restaurant.Name, restaurant.Image, restaurant.WorkingHours.Opening, restaurant.WorkingHours.Closing)
 			if err != nil {
 				log.Fatal(err)
 			}
-		}()
+			fmt.Println(restaurantID)
+
+		})
+	}
+	for _, restaurant := range restaurants {
+		pool.Jobs <- restaurant
 	}
 	wg.Wait()
+
 }

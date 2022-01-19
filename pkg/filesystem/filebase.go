@@ -7,12 +7,6 @@ import (
 	"taska/pkg/models"
 )
 
-func Parse(inf []byte, s models.Menu) (models.Menu, error) {
-	err := json.Unmarshal(inf, &s)
-
-	return s, err
-}
-
 func ScanFile(filePath string) (data []byte, err error) {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -25,4 +19,15 @@ func ScanFile(filePath string) (data []byte, err error) {
 		data = append(data, scanner.Text()...)
 	}
 	return data, err
+}
+
+func ReadJSON(filePath string, c chan models.Restaurant) error {
+	var restaurant models.Restaurant
+	data, err := ScanFile(filePath)
+	if err != nil {
+		return err
+	}
+	err = json.Unmarshal(data, &restaurant)
+	c <- restaurant
+	return err
 }
