@@ -2,9 +2,6 @@ package parser
 
 import (
 	"database/sql"
-	"errors"
-	"log"
-	"strings"
 )
 
 type Restaurant struct {
@@ -28,18 +25,18 @@ type Menu struct {
 }
 
 func (r *Restaurant) Insert(db *sql.DB) (int64, error) {
-	query := `INSERT INTO Restaurant (name, image, open, close)
-			  VALUES (?,?,?,?)`
-	res, err := db.Exec(query, r.Name, r.Image, r.WorkingHours.Opening, r.WorkingHours.Closing)
+	query := `INSERT INTO Restaurant (name, image, open, close, external_id)
+			  VALUES (?,?,?,?,?)`
+	res, err := db.Exec(query, r.Name, r.Image, r.WorkingHours.Opening, r.WorkingHours.Closing, r.Id)
 	if err != nil {
 		return 0, err
 	}
 	return res.LastInsertId()
 }
 func (p Menu) Insert(db *sql.DB) (int64, error) {
-	query := `INSERT INTO products( name, price,image, type) 
-			  VALUES (?,?,?,?)`
-	res, err := db.Exec(query, p.Name, p.Price, p.Image, p.Type)
+	query := `INSERT INTO products( name, price,image, type, external_id) 
+			  VALUES (?,?,?,?,?)`
+	res, err := db.Exec(query, p.Name, p.Price, p.Image, p.Type, p.Id)
 	if err != nil {
 		return 0, err
 	}
@@ -55,27 +52,7 @@ func DeleteTables(db *sql.DB) error {
 	_, err = db.Exec(q3)
 	q4 := `DELETE FROM rest_products`
 	_, err = db.Exec(q4)
+	q5 := `DELETE FROM product_ingredients`
+	_, err = db.Exec(q5)
 	return err
-}
-
-func GetRowId(db *sql.DB, selectQuery, insertQuery string, args ...interface{}) int64 {
-	row := db.QueryRow(selectQuery, args...)
-	var id int64
-	err := row.Scan(&id)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			log.Println(err)
-		}
-		result, err := db.Exec(insertQuery, args...)
-		if err != nil {
-			if strings.HasPrefix(err.Error(), "Error 1062") {
-				return GetRowId(db, selectQuery, insertQuery, args...)
-			}
-		}
-		id, err = result.LastInsertId()
-		if err != nil {
-			log.Fatalln(err)
-		}
-	}
-	return id
 }

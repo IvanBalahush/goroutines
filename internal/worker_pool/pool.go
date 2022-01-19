@@ -2,39 +2,41 @@ package workerPool
 
 import (
 	"sync"
-	"taska/pkg/models"
+	models "taska/pkg/parser"
 )
 
 type WorkerPool struct {
 	WorkerCount int
 	Jobs        chan models.Restaurant
-	results     chan models.Restaurant
+	Results     chan models.Restaurant
 }
 
 func NewPool(count int) *WorkerPool {
 	return &WorkerPool{
 		WorkerCount: count,
 		Jobs:        make(chan models.Restaurant, count),
-		results:     make(chan models.Restaurant, count),
+		Results:     make(chan models.Restaurant, count),
 	}
 }
 
-func (w *WorkerPool) Run(wg *sync.WaitGroup, handler func(restaurant models.Restaurant))  {
+func (w *WorkerPool) Run(wg *sync.WaitGroup, handler func(restaurant models.Restaurant)) {
 	defer wg.Done()
 	var restaurant models.Restaurant
 	for {
 		select {
 		case restaurant = <-w.Jobs:
 			handler(restaurant)
-		case <-w.results:
+		case <-w.Results:
 			w.Stop()
 			return
 		}
 	}
 }
 
-func (w *WorkerPool) Stop()  {
+func (w *WorkerPool) Stop() {
 	for i := 0; i < w.WorkerCount; i++ {
-		w.results<-models.Restaurant{}
+		w.Results <- models.Restaurant{}
 	}
+	close(w.Jobs)
+	close(w.Results)
 }
