@@ -1,17 +1,14 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"path/filepath"
 	"strconv"
-	"sync"
+	"strings"
 	"taska/db"
-	workerPool "taska/internal/worker_pool"
 	"taska/pkg/filesystem"
-	"taska/pkg/models"
+	models "taska/pkg/parser"
 )
-
 
 func main() {
 	conn, err := db.Connect()
@@ -36,38 +33,51 @@ func main() {
 	for i := 0; i < 7; i++ {
 		restaurants = append(restaurants, <-ch)
 	}
-
-
-
-	models.DropRestaurant(conn)
-	models.DropProduct(conn)
-
-	pool := workerPool.NewPool(4)
-	count := pool.WorkerCount
-	var wg sync.WaitGroup
-	for i := 0; i < count; i++ {
-		//wg.Add(1)
-		//go func(i int) {
-		//	defer wg.Done()
-		//	err := restaurants[i].Insert(conn)
-		//	if err != nil {
-		//		log.Fatal(err)
-		//	}
-		//}(i)
-		wg.Add(1)
-		go pool.Run(&wg, func(restaurant models.Restaurant) {
-			restaurantID := models.GetID(conn, `SELECT id FROM Restaurant WHERE name = ?`, `INSERT INTO Restaurant(name) VALUE (?)`, restaurant.Name)
-			_, err := conn.Exec(`INSERT INTO Restaurant VALUE (?,?,?,?,?)`, restaurant.Id, restaurant.Name, restaurant.Image, restaurant.WorkingHours.Opening, restaurant.WorkingHours.Closing)
-			if err != nil {
-				log.Fatal(err)
-			}
-			fmt.Println(restaurantID)
-
-		})
+	err = models.DeleteTables(conn)
+	if err != nil {
+		log.Fatal(err)
 	}
+
 	for _, restaurant := range restaurants {
-		pool.Jobs <- restaurant
-	}
-	wg.Wait()
+		resID, err := restaurant.Insert(conn)
+		if err != nil {
+			log.Fatal(err)
+		}
 
+		for _, product := range restaurant.Menu {
+			prodID, err := product.Insert(conn)
+			if err != nil {
+				if strings.HasPrefix(err.Error(), "Error 1062") {
+					continue
+				} else {
+					log.Fatal(err)
+				}
+			}
+			restProductQuery := `INSERT INTO rest_products(rest_id, product_id, price) 
+					  VALUES (?,?,?)`
+			_, err = conn.Exec(restProductQuery, resID, prodID, product.Price)
+			for _, ingredient := range product.Ingredients {
+				ingredientsQuery := `INSERT INTO ingredients(name)
+				VALUES (?)`
+				ingredientRes, err := conn.Exec(ingredientsQuery, ingredient)
+				if err != nil {
+					log.Fatal(err)
+				}
+				ingID, err := ingredientRes.LastInsertId()
+				if err != nil {
+					log.Fatal(err)
+				}
+				productIngredientsQuery := `INSERT INTO product_ingredients (product_id, ingredient_id) 
+											VALUES (?,?)`
+				_, err = conn.Exec(productIngredientsQuery, prodID, ingID)
+				if err != nil {
+					if strings.HasPrefix(err.Error(), "Error 1062") {
+						continue
+					} else {
+						log.Fatal(err)
+					}
+				}
+			}
+		}
+	}
 }
