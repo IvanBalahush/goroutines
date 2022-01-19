@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"os"
-	"taska/pkg/models"
+	models "taska/pkg/parser"
 )
 
 func ScanFile(filePath string) (data []byte, err error) {
