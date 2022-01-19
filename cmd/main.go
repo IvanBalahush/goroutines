@@ -61,7 +61,11 @@ func main() {
 				VALUES (?)`
 				ingredientRes, err := conn.Exec(ingredientsQuery, ingredient)
 				if err != nil {
-					log.Fatal(err)
+					if strings.HasPrefix(err.Error(), "Error 1062") {
+						continue
+					} else {
+						log.Fatal(err)
+					}
 				}
 				ingID, err := ingredientRes.LastInsertId()
 				if err != nil {
