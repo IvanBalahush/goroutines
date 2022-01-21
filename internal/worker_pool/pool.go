@@ -1,42 +1,44 @@
 package workerPool
 
 import (
+	"log"
 	"sync"
 	models "taska/pkg/parser"
 )
 
 type WorkerPool struct {
-	WorkerCount int
-	Jobs        chan models.Restaurant
-	Results     chan models.Restaurant
+	Count  int
+	Sender chan models.Restaurant
+	Ender  chan bool
 }
 
-func NewPool(count int) *WorkerPool {
+func NewWorkerPool(count int) *WorkerPool {
 	return &WorkerPool{
-		WorkerCount: count,
-		Jobs:        make(chan models.Restaurant, count),
-		Results:     make(chan models.Restaurant, count),
+		Count:  count,
+		Sender: make(chan models.Restaurant, count*2),
+		Ender:  make(chan bool),
 	}
 }
 
-func (w *WorkerPool) Run(wg *sync.WaitGroup, handler func(restaurant models.Restaurant)) {
+func (p *WorkerPool) Run(wg *sync.WaitGroup, handler func(author models.Restaurant)) {
 	defer wg.Done()
-	var restaurant models.Restaurant
+	var shop models.Restaurant
 	for {
 		select {
-		case restaurant = <-w.Jobs:
-			handler(restaurant)
-		case <-w.Results:
-			w.Stop()
+		case shop = <-p.Sender:
+			handler(shop)
+		case <-p.Ender:
+			//fmt.Println(<- p.Sender)
+			log.Println("I am finish")
 			return
 		}
 	}
 }
 
-func (w *WorkerPool) Stop() {
-	for i := 0; i < w.WorkerCount; i++ {
-		w.Results <- models.Restaurant{}
+func (p *WorkerPool) Stop() {
+	for i := 0; i < p.Count; i++ {
+		p.Ender <- false
 	}
-	close(w.Jobs)
-	close(w.Results)
+	close(p.Sender)
+	close(p.Ender)
 }

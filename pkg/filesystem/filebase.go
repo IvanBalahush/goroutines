@@ -3,6 +3,8 @@ package filesystem
 import (
 	"bufio"
 	"encoding/json"
+	"io/ioutil"
+	"log"
 	"os"
 	models "taska/pkg/parser"
 )
@@ -30,4 +32,26 @@ func ReadJSON(filePath string, c chan models.Restaurant) error {
 	err = json.Unmarshal(data, &restaurant)
 	c <- restaurant
 	return err
+}
+func ParseFiles(filePath string) (models.Restaurant, error) {
+	var restaurant models.Restaurant
+	jsonFile, err := os.Open(filePath)
+	if err != nil {
+		log.Println(err)
+	}
+	byteValue, err := ioutil.ReadAll(jsonFile)
+
+	defer func(jsonFile *os.File) {
+		err := jsonFile.Close()
+		if err != nil {
+			log.Println(err)
+		}
+	}(jsonFile)
+
+	err = json.Unmarshal(byteValue, &restaurant)
+	if err != nil {
+		log.Println(err)
+	}
+	//c1 <- restaurant
+	return restaurant, nil
 }

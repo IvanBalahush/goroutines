@@ -2,6 +2,7 @@ package parser
 
 import (
 	"database/sql"
+	"fmt"
 )
 
 type Restaurant struct {
@@ -25,18 +26,18 @@ type Menu struct {
 }
 
 func (r *Restaurant) Insert(db *sql.DB) (int64, error) {
-	query := `INSERT INTO Restaurant (name, image, open, close, external_id)
-			  VALUES (?,?,?,?,?)`
-	res, err := db.Exec(query, r.Name, r.Image, r.WorkingHours.Opening, r.WorkingHours.Closing, r.Id)
+	query := `INSERT INTO Restaurant (name, image, open, close)
+			  VALUES (?,?,?,?)`
+	res, err := db.Exec(query, r.Name, r.Image, r.WorkingHours.Opening, r.WorkingHours.Closing)
 	if err != nil {
 		return 0, err
 	}
 	return res.LastInsertId()
 }
 func (p Menu) Insert(db *sql.DB) (int64, error) {
-	query := `INSERT INTO products( name, price,image, type, external_id) 
-			  VALUES (?,?,?,?,?)`
-	res, err := db.Exec(query, p.Name, p.Price, p.Image, p.Type, p.Id)
+	query := `INSERT INTO products( name, price,image, type) 
+			  VALUES (?,?,?,?)`
+	res, err := db.Exec(query, p.Name, p.Price, p.Image, p.Type)
 	if err != nil {
 		return 0, err
 	}
@@ -55,4 +56,11 @@ func DeleteTables(db *sql.DB) error {
 	q5 := `DELETE FROM product_ingredients`
 	_, err = db.Exec(q5)
 	return err
+}
+
+func (w Restaurant) Do(data interface{}, i int) {
+	fmt.Printf("Goroutine number %d, is running. Input %s \n", i, data)
+}
+func (w Restaurant) Stop() {
+
 }
